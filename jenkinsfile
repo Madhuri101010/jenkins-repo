@@ -1,32 +1,52 @@
 pipeline {
-    agent any
+    agent any 
 
-   
+    environment {
+        DOCKER_HUB_CREDENTIALS = credentials('dockerhub-credentials') 
+        DOCKER_IMAGE_NAME = 'madhuribairi/my-node-app' 
+    }
+
     stages {
-        stage('Clone Repository') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url 'https://github.com/Madhuri101010/jenkins-repo.git'
+                git branch:"main", url:'https://github.com/Madhuri101010/jenkins-repo.git', credentialsId:'my-github-credentials'
             }
         }
 
         stage('Install Dependencies') {
             steps {
+                sh "echo Installing dependencies"
                 sh 'npm install'
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh 'npm test'
+                sh "echo Running tests"
+                sh 'npm test' 
             }
         }
 
-        stage('Build') {
+        stage('Dockerize') {
             steps {
-                sh 'npm build'
+                script {
+                    sh "echo Dockerizing the application"
+                    sh "docker build -t ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} ."
+                }
             }
         }
 
-        
+        stage('Publish to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh "echo ${DOCKER_HUB_PASSWORD} | docker login -u ${DOCKER_HUB_USERNAME} --password-stdin"
+                        sh "docker push ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER}"
+                        sh "docker tag ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER} ${DOCKER_IMAGE_NAME}:latest"
+                        sh "docker push ${DOCKER_IMAGE_NAME}:latest"
+                    }
+                }
+            }
+        }
     }
 }
